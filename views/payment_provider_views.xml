@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="payment_provider_form" model="ir.ui.view">
+        <field name="name">WebPay Provider Form</field>
+        <field name="model">payment.provider</field>
+        <field name="inherit_id" ref="payment.payment_provider_form"/>
+        <field name="arch" type="xml">
+            <group name="provider_credentials" position="inside">
+                <group invisible="code != 'webpay'">
+                    <field name="webpay_commerce_code"
+                           required="code == 'webpay' and state != 'disabled'"/>
+                    <field name="webpay_api_key"
+                           password="True"
+                           required="code == 'webpay' and state != 'disabled'"/>
+                    <div class="text-muted" colspan="2">
+                        En "Modo de prueba" se usa el ambiente de integración de Transbank y en
+                        "Habilitado", el de producción.
+                    </div>
+                </group>
+            </group>
+        </field>
+    </record>
+
+</odoo>
