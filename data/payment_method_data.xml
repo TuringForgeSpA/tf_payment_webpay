@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Sin noupdate: se ejecuta en cada instalación y actualización del módulo. -->
+    <function model="payment.method" name="_webpay_set_refund_support"/>
+
+</odoo>

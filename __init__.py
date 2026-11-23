@@ -9,4 +9,5 @@ def post_init_hook(env):
 
 
 def uninstall_hook(env):
+    env['payment.method']._webpay_set_refund_support('none')
     reset_payment_provider(env, 'webpay')

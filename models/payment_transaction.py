@@ -1,5 +1,6 @@
 import hashlib
 import logging
+import pprint
 
 from transbank.error.transbank_error import TransbankError
 from werkzeug import urls
@@ -120,7 +121,9 @@ class PaymentTransaction(models.Model):
         else:
             raise ValidationError("WebPay: " + _("Se recibieron datos sin token ni orden de compra."))
 
-        tx = self.search(domain + [('provider_code', '=', 'webpay')], limit=1)
+        tx = self.search(
+            domain + [('provider_code', '=', 'webpay'), ('operation', '!=', 'refund')], limit=1,
+        )
         if not tx:
             raise ValidationError(
                 "WebPay: " + _("No se encontró ninguna transacción para los datos recibidos.")
@@ -150,9 +153,19 @@ class PaymentTransaction(models.Model):
             return
 
         if notification_data.get('TBK_TOKEN'):
+            _logger.info(
+                "WebPay: pago anulado por el cliente. Transacción %s, token %s, orden de compra %s.",
+                self.reference, self.webpay_token, self.webpay_buy_order,
+            )
             self._set_canceled(state_message=_("El pago fue anulado en el formulario de WebPay."))
             return
         if not notification_data.get('token_ws'):
+            # En un timeout Transbank no devuelve el token: se registra el que se obtuvo al crear
+            # la transacción, que es el que se informa en la validación.
+            _logger.info(
+                "WebPay: tiempo agotado en el formulario. Transacción %s, token %s, orden de "
+                "compra %s.", self.reference, self.webpay_token, self.webpay_buy_order,
+            )
             self._set_canceled(state_message=_("Se agotó el tiempo para completar el pago en WebPay."))
             return
 
@@ -168,6 +181,10 @@ class PaymentTransaction(models.Model):
             ))
             return
 
+        _logger.info(
+            "WebPay: respuesta del commit para la transacción %s (token %s):\n%s",
+            self.reference, self.webpay_token, pprint.pformat(response),
+        )
         self._webpay_apply_commit_response(response)
 
     def _webpay_apply_commit_response(self, response):
@@ -226,22 +243,42 @@ class PaymentTransaction(models.Model):
         if self.provider_code != 'webpay':
             return refund_tx
 
+        # Las anulaciones se hacen sobre el token de la transacción original; se copia al
+        # reembolso para tenerlo a mano en la validación con Transbank.
+        refund_tx.write({
+            'webpay_token': self.webpay_token,
+            'webpay_buy_order': self.webpay_buy_order,
+        })
         amount = refund_tx._webpay_get_amount()
+        _logger.info(
+            "WebPay: solicitud de anulación %s de la transacción %s por %s (token %s, orden de "
+            "compra %s).", refund_tx.reference, self.reference, amount, self.webpay_token,
+            self.webpay_buy_order,
+        )
         try:
             response = self.provider_id._webpay_get_transaction().refund(self.webpay_token, amount)
         except TransbankError as error:
             _logger.warning(
-                "WebPay: error al reembolsar %s: %s", self.reference, error.message,
+                "WebPay: error en la anulación %s (token %s): %s",
+                refund_tx.reference, self.webpay_token, error.message,
             )
             refund_tx._set_error("WebPay: " + _(
                 "Transbank rechazó el reembolso: %(message)s", message=error.message,
             ))
             return refund_tx
 
+        _logger.info(
+            "WebPay: respuesta de la anulación %s (token %s):\n%s",
+            refund_tx.reference, self.webpay_token, pprint.pformat(response),
+        )
         refund_type = response.get('type')
         if refund_type in const.REFUND_TYPES_OK and response.get('response_code', 0) == 0:
             refund_tx.provider_reference = response.get('authorization_code') or refund_type
-            refund_tx._set_done()
+            refund_tx._set_done(state_message=_(
+                "Anulación %(type)s en Transbank. Token: %(token)s. Autorización: %(code)s.",
+                type=refund_type, token=self.webpay_token,
+                code=response.get('authorization_code') or '-',
+            ))
         else:
             refund_tx._set_error("WebPay: " + _(
                 "Respuesta inesperada de Transbank al reembolsar (tipo %(type)s).",

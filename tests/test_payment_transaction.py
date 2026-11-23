@@ -115,3 +115,25 @@ class TestPaymentTransaction(WebpayCommon, PaymentHttpCommon):
         refund.assert_called_once_with(self.token, 5000)
         self.assertEqual(refund_tx.state, 'done')
         self.assertEqual(refund_tx.amount, -5000)
+        self.assertEqual(refund_tx.webpay_token, self.token, "El reembolso guarda el token original.")
+        self.assertIn(self.token, refund_tx.state_message)
+
+    def test_return_lookup_ignores_refunds(self):
+        """ Un retorno con el token original debe encontrar el pago, no su reembolso. """
+        tx = self._create_webpay_transaction()
+        self._create_transaction(
+            'redirect', reference=f'R-{tx.reference}', amount=-tx.amount, operation='refund',
+            source_transaction_id=tx.id, webpay_token=self.token,
+        )
+        found = self.env['payment.transaction']._get_tx_from_notification_data(
+            'webpay', {'token_ws': self.token},
+        )
+        self.assertEqual(found, tx)
+
+    def test_timeout_logs_original_token(self):
+        tx = self._create_webpay_transaction()
+        with self.assertLogs('odoo.addons.tf_payment_webpay.models.payment_transaction', 'INFO') as logs:
+            tx._handle_notification_data('webpay', {
+                'TBK_ORDEN_COMPRA': tx.webpay_buy_order, 'TBK_ID_SESION': str(tx.id),
+            })
+        self.assertTrue(any(self.token in line for line in logs.output))

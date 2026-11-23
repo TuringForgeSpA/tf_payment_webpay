@@ -7,6 +7,7 @@
         <field name="inherit_id" ref="payment.payment_transaction_form"/>
         <field name="arch" type="xml">
             <field name="provider_reference" position="after">
+                <field name="webpay_token" invisible="provider_code != 'webpay'"/>
                 <field name="webpay_buy_order" invisible="provider_code != 'webpay'"/>
                 <field name="webpay_payment_type_code" invisible="provider_code != 'webpay'"/>
                 <field name="webpay_installments_number"

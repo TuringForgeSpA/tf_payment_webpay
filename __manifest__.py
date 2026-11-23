@@ -1,6 +1,6 @@
 {
     'name': 'Payment Provider: WebPay Plus',
-    'version': '18.0.1.1.0',
+    'version': '18.0.1.1.2',
     'category': 'Accounting/Payment Providers',
     'sequence': 340,
     'summary': 'Proveedor de pago chileno: WebPay Plus de Transbank.',
@@ -13,6 +13,7 @@
         'views/payment_provider_views.xml',
         'views/payment_transaction_views.xml',
 
+        'data/payment_method_data.xml',
         'data/payment_provider_data.xml',
     ],
     'external_dependencies': {
